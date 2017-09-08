@@ -6,14 +6,20 @@ import numpy as np
 
 
 # Define x as covariates and y as dependent variable
-x = tf.placeholder(tf.float32, shape = (4,3))
-y = tf.placeholder(tf.float32, shape = (4,1))
+x = tf.placeholder(tf.float32, shape = (xval.shape[0],xval.shape[1]))
+y = tf.placeholder(tf.float32, shape = (xval.shape[0],1))
 
 # Define linear least squares estimator
-b = tf.matmul(tf.matmul( tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) ) , tf.transpose(x)), y)
+inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
+b_est = tf.matmul(tf.matmul( inverse , tf.transpose(x)), y)
+
+# Get the std error of the beta estimator.
+sum_sq_resid = tf.reduce_sum(tf.square(tf.subtract(y, tf.matmul(x, b_est))), axis = 0)
+b_stderr = tf.diag_part(tf.sqrt(tf.multiply(sum_sq_resid, inverse)))
+
 
 # Test the estimator
 #sess = tf.Session()
-#xval = np.matrix('1 3 8; 1 5 2; 2 1 5; 4 6 4')
-#yval = np.matrix('1;2;3;4')
-#print(sess.run(b, feed_dict={x: xval, y: yval}))
+#xval = np.matrix( [ [1, 5, 5], [3, 2, 4],[8, 2, 6], [1, 1, 4] ], dtype = np.float32 )
+#yval = np.matrix([ [1], [2], [3], [4] ], dtype = np.float32)
+#print(sess.run([b_est, b_stderr], feed_dict={x: xval,y: yval}))
