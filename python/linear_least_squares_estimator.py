@@ -14,7 +14,7 @@ import numpy as np
 FLAGS = None
 
 
-def apply_least_squares(x, y): 
+def apply_least_squares(x, y, robust_errors = True): 
     
     # Define a least squares named scope for tensorboard visualisation    
     with tf.name_scope('least_squares'):
@@ -23,18 +23,47 @@ def apply_least_squares(x, y):
         inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
         beta_estimate = tf.matmul(tf.matmul( inverse , tf.transpose(x)), y)
         
-        # Get the variance-covariance matrix of the beta estimator.
-        # The diagonal elements of this matrix gives us the variance of the estimated beta coefficients
-        # For this, get the sum of squared errors between actual and estimated 'y'. 
-        # Then apply (estimated_error^2)*((X'X)^-1) / (n- k)
-        sum_sq_est_resid = tf.reduce_sum(tf.square(tf.subtract(y, tf.matmul(x, beta_estimate))), 
-                                     axis = 0) / tf.cast( (tf.shape(x)[0] -tf.shape(x)[1]), tf.float32)
-        beta_var_cov = tf.multiply(sum_sq_est_resid, inverse)
+        # Get the estimated error in y.
+        est_err = tf.subtract(y, tf.matmul(x, beta_estimate))        
+             
+        if robust_errors == True:
+            beta_var_cov = white_robust_std_errors(x, est_err, inverse = inverse)
+        else:
+            beta_var_cov = homoskedastic_std_errors(x, est_err, inverse = inverse)
+        
         #tf.summary.scalar('sum_squared_err', sum_sq_resid)        
         #beta_stderror = tf.diag_part(tf.sqrt(tf.multiply(sum_sq_resid, inverse)))
     
     # Return the estimated regression coefficients and the variance-covariance estimators of coefficients.
     return beta_estimate, beta_var_cov
+
+def homoskedastic_std_errors(x, est_error, inverse = None):
+    # Get the variance-covariance matrix of the beta estimator.
+    # The diagonal elements of this matrix gives us the variance of the estimated beta coefficients
+    # For this, get the sum of squared errors between actual and estimated 'y'.
+    # Then apply (estimated_error^2)*((X'X)^-1) / (n- k)
+    if inverse == None:
+        inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
+        
+    sum_sq_est_resid = tf.reduce_sum(tf.square(est_error), 
+                                         axis = 0) / tf.cast( (tf.shape(x)[0] - tf.shape(x)[1]), tf.float32)
+    beta_var_cov = tf.multiply(sum_sq_est_resid, inverse) 
+    return beta_var_cov
+    
+
+def white_robust_std_errors(x, est_error, inverse = None):
+    if inverse == None:
+        inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
+    
+    sq_est_resid =  tf.matmul(est_error, tf.transpose(est_error) )
+    beta_var_cov = tf.multiply(
+            tf.matmul( tf.matmul(inverse, tf.matmul(tf.matmul(tf.transpose(x), sq_est_resid), x) ), inverse),
+             tf.cast( (  tf.shape(x)[0]/ (tf.shape(x)[0] - tf.shape(x)[1]) ), tf.float32))
+    return beta_var_cov
+     
+    
+    
+
 
 def run_linear_model(xval, yval, intercept = True):
     
@@ -71,7 +100,7 @@ if __name__ == '__main__':
     
     tf.gfile.MakeDirs(FLAGS.log_dir)
     # Test the estimator
-    xval = np.matrix( [ [1, 5, 5], [3, 2, 4],[8, 2, 6], [1, 1, 4] ], dtype = np.float32 )
-    yval = np.matrix([ [1], [2], [3], [4] ], dtype = np.float32)
+    xval = np.matrix( [ [1, 2, 6], [3, 1, 3],[8, 5, 8], [1, 4, 1], [5, 6, 4], [2, 4, 8] ], dtype = np.float32 )
+    yval = np.matrix([ [1], [2], [3], [4], [5], [1.5] ], dtype = np.float32)
     a, b = run_linear_model(xval, yval)
     
