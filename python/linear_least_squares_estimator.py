@@ -14,7 +14,7 @@ import numpy as np
 FLAGS = None
 
 
-def apply_least_squares(x, y, robust_errors = True): 
+def apply_least_squares(x, y, robust_errors = False): 
     
     # Define a least squares named scope for tensorboard visualisation    
     with tf.name_scope('least_squares'):
@@ -42,25 +42,30 @@ def homoskedastic_std_errors(x, est_error, inverse = None):
     # The diagonal elements of this matrix gives us the variance of the estimated beta coefficients
     # For this, get the sum of squared errors between actual and estimated 'y'.
     # Then apply (estimated_error^2)*((X'X)^-1) / (n- k)
-    if inverse == None:
-        inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
-        
-    sum_sq_est_resid = tf.reduce_sum(tf.square(est_error), 
-                                         axis = 0) / tf.cast( (tf.shape(x)[0] - tf.shape(x)[1]), tf.float32)
-    beta_var_cov = tf.multiply(sum_sq_est_resid, inverse) 
+    with tf.name_scope('homoskedastic_errors'):
+        if inverse == None:
+            inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
+            
+        sum_sq_est_resid = tf.reduce_sum(tf.square(est_error), 
+                                             axis = 0) / tf.cast( (tf.shape(x)[0] - tf.shape(x)[1]), tf.float32)
+        beta_var_cov = tf.multiply(sum_sq_est_resid, inverse) 
     return beta_var_cov
     
 
 def white_robust_std_errors(x, est_error, inverse = None):
-    if inverse == None:
-        inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
-    
-    sq_est_resid =  tf.matmul(est_error, tf.transpose(est_error) )
-    beta_var_cov = tf.multiply(
-            tf.matmul( tf.matmul(inverse, tf.matmul(tf.matmul(tf.transpose(x), sq_est_resid), x) ), inverse),
-             tf.cast( (  tf.shape(x)[0]/ (tf.shape(x)[0] - tf.shape(x)[1]) ), tf.float32))
-    return beta_var_cov
-     
+    # In case of heteroskedastic erros, use a robust error estmation
+    # var_cov(b_estimate) = (n/n-k)*((X'X)^-1) X' ee' X ((X'X)^-1)
+    # Assume no serial correlation in the errors.
+    with tf.name_scope('white_robust_std_errors'):
+        if inverse == None:
+            inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
+        
+        # Create a diagonal matrix with the variance of error terms and 0 for covariance error terms
+        sq_est_resid =  tf.diag(tf.diag_part(tf.matmul(est_error, tf.transpose(est_error) ) ) )
+        beta_var_cov = tf.multiply(
+                tf.matmul( tf.matmul(inverse, tf.matmul(tf.matmul(tf.transpose(x), sq_est_resid), x) ), inverse),
+                 tf.cast( (  tf.shape(x)[0]/ (tf.shape(x)[0] - tf.shape(x)[1]) ), tf.float32))
+    return beta_var_cov    
     
     
 
@@ -76,7 +81,7 @@ def run_linear_model(xval, yval, intercept = True):
     y = tf.placeholder(tf.float32, shape = (yval.shape[0], yval.shape[1]), name  = 'y_input' )
     
     # Invoke least squares
-    beta_estimate, beta_var_cov = apply_least_squares(x,y)              
+    beta_estimate, beta_var_cov = apply_least_squares(x,y, robust_errors = True)              
     merged_summary = tf.summary.merge_all()
     
     # Use a tensorflow session to run the code and get the estimates
