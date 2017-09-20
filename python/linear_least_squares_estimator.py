@@ -31,11 +31,21 @@ def apply_least_squares(x, y, robust_errors = False):
         else:
             beta_var_cov = homoskedastic_std_errors(x, est_err, inverse = inverse)
         
-        #tf.summary.scalar('sum_squared_err', sum_sq_resid)        
-        #beta_stderror = tf.diag_part(tf.sqrt(tf.multiply(sum_sq_resid, inverse)))
+        # Std Errors of regression coefficients      
+        beta_stderror = tf.sqrt(tf.matrix_diag_part(beta_var_cov))
+        beta_stderror = tf.reshape(beta_stderror, shape = [ tf.shape(beta_stderror)[0] ,1])
+        
+        # Calculate t-statistic for the beta estimates
+        t_stat = tf.truediv(beta_estimate, beta_stderror)
+        df = tf.cast( (tf.shape(x)[0] - tf.shape(x)[1]), tf.float32)
+        
+        # Perform a 2-sided hypothesis test for the beta estimates
+        t_dist = tf.contrib.distributions.StudentT(df=df, loc=0.0, scale=1.0)
+        probs = tf.multiply(2., tf.subtract(1., t_dist.cdf(t_stat)))
+        
     
-    # Return the estimated regression coefficients and the variance-covariance estimators of coefficients.
-    return beta_estimate, beta_var_cov
+    # Return the estimated regression coefficients and std errors.
+    return tf.concat([beta_estimate, beta_stderror, t_stat, probs], axis=1)
 
 def homoskedastic_std_errors(x, est_error, inverse = None):
     # Get the variance-covariance matrix of the beta estimator.
@@ -46,9 +56,9 @@ def homoskedastic_std_errors(x, est_error, inverse = None):
         if inverse == None:
             inverse = tf.matrix_inverse( tf.matmul( tf.transpose(x), x ) )
             
-        sum_sq_est_resid = tf.reduce_sum(tf.square(est_error), 
+        sq_est_resid = tf.reduce_sum(tf.square(est_error), 
                                              axis = 0) / tf.cast( (tf.shape(x)[0] - tf.shape(x)[1]), tf.float32)
-        beta_var_cov = tf.multiply(sum_sq_est_resid, inverse) 
+        beta_var_cov = tf.multiply(sq_est_resid, inverse) 
     return beta_var_cov
     
 
@@ -81,15 +91,15 @@ def run_linear_model(xval, yval, intercept = True):
     y = tf.placeholder(tf.float32, shape = (yval.shape[0], yval.shape[1]), name  = 'y_input' )
     
     # Invoke least squares
-    beta_estimate, beta_var_cov = apply_least_squares(x,y, robust_errors = True)              
+    ls_output = apply_least_squares(x,y, robust_errors = False) 
     merged_summary = tf.summary.merge_all()
     
     # Use a tensorflow session to run the code and get the estimates
     with tf.Session() as sess:        
         summary_writer = tf.summary.FileWriter(FLAGS.log_dir, graph = tf.get_default_graph() )        
-        res1, res2 = sess.run([beta_estimate, beta_var_cov], feed_dict={x: xval, y: yval})
+        res1 = sess.run([ls_output], feed_dict={x: xval, y: yval})
         
-    return res1, res2
+    return res1
 
 
 if __name__ == '__main__':
@@ -107,5 +117,5 @@ if __name__ == '__main__':
     # Test the estimator
     xval = np.matrix( [ [1, 2, 6], [3, 1, 3],[8, 5, 8], [1, 4, 1], [5, 6, 4], [2, 4, 8] ], dtype = np.float32 )
     yval = np.matrix([ [1], [2], [3], [4], [5], [1.5] ], dtype = np.float32)
-    a, b = run_linear_model(xval, yval)
+    a = run_linear_model(xval, yval)
     
