@@ -1,6 +1,6 @@
 # ========================================================================================
 # Purpose: Demonstrate the inner workings of a least squares estimator using Tensorflow.
-#    This can then be compared against other kinds of estimator. Tensorboard will be used
+#    This can then be compared against other kinds of estimators. Tensorboard will be used
 #    to visualise the components.
 # ========================================================================================
 
@@ -41,7 +41,7 @@ def apply_least_squares(x, y, robust_errors = False):
         
         # Perform a 2-sided hypothesis test for the beta estimates
         t_dist = tf.contrib.distributions.StudentT(df=df, loc=0.0, scale=1.0)
-        probs = tf.multiply(2., tf.subtract(1., t_dist.cdf(t_stat)))
+        probs = tf.multiply(2., tf.subtract(1., t_dist.cdf(tf.abs(t_stat)) ))
         
     
     # Return the estimated regression coefficients and std errors.
@@ -114,6 +114,7 @@ if __name__ == '__main__':
     FLAGS, unparsed = parser.parse_known_args()
     
     tf.gfile.MakeDirs(FLAGS.log_dir)
+    
     # Test the estimator
     xval = np.matrix( [ [1, 2, 6], [3, 1, 3],[8, 5, 8], [1, 4, 1], [5, 6, 4], [2, 4, 8] ], dtype = np.float32 )
     yval = np.matrix([ [1], [2], [3], [4], [5], [1.5] ], dtype = np.float32)
