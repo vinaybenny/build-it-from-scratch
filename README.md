@@ -1,4 +1,4 @@
-#build-it-from-scratch
+# build-it-from-scratch
 
 Primary objective: Build various statistical, computing and machine learning concepts/algorithms from ground-up to better understand/illustrate how these things work, and why.
 
